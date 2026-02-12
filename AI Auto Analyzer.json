@@ -1,0 +1,457 @@
+{
+  "name": "AI Auto Analyzer",
+  "nodes": [
+    {
+      "parameters": {
+        "inputDataFieldName": "=cv0",
+        "name": "={{ $json.from.value[0].name }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1zza-_w7lDNdVc_YhgYgG8GJUqxOw6MV7",
+          "mode": "list",
+          "cachedResultName": "Job Resumes N8N",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1zza-_w7lDNdVc_YhgYgG8GJUqxOw6MV7"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        176,
+        0
+      ],
+      "id": "41986d83-9c09-405e-b95d-4915a2d526a9",
+      "name": "Upload file1",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "DAPXwdHtDf20g79j",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        384,
+        0
+      ],
+      "id": "c37f0880-8bad-40a7-a867-c41f7c8ab472",
+      "name": "Download file1",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "DAPXwdHtDf20g79j",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.text }}",
+        "schemaType": "manual",
+        "inputSchema": "{\n \"type\": \"object\",\n \"properties\": {\n \"name\": {\n \"type\": \"string\"\n },\n \"email\": {\n \"type\": \"string\",\n \"format\": \"email\"\n },\n \"phone_number\": {\n \"type\": \"string\",\n \"pattern\": \"^(\\\\+\\\\d{1,3}[- ]?)?\\\\d{10}$\"\n }\n },\n \"required\": [\"name\", \"email\", \"phone_number\"]\n}\n",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        800,
+        0
+      ],
+      "id": "b266aea0-ca62-46f2-a827-8a1f759757a7",
+      "name": "Information Extractor1"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        592,
+        0
+      ],
+      "id": "e0f4ba3c-2806-41ce-b8b3-d1419ed02c18",
+      "name": "Extract from File1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7edad3a0-b6bb-4ac4-95e8-0a73fc0783fa",
+              "name": "content",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1504,
+        0
+      ],
+      "id": "cdb38ba4-9b37-4719-a211-e9db892de35e",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Read input text\nconst inputData = $input.first().json.content || \"\";\n\n// 2. Helper: extract a block that starts with a header and goes till end\nconst grabBlock = (text, header) => {\n  const re = new RegExp(`\\\\*{0,2}${header}\\\\*{0,2}[\\\\s:]*([\\\\s\\\\S]*)`, 'i');\n  const m = re.exec(text);\n  return m ? m[1].trim() : null;\n};\n\n// 3. Helper: extract section between bold headers\nconst grabSection = (text, label) => {\n  const re = new RegExp(\n    `\\\\*{0,2}${label}\\\\*{0,2}[\\\\s:]*([\\\\s\\\\S]*?)(?=\\\\n\\\\*{0,2}[A-Z][^\\\\n]*\\\\*{0,2}|$)`,\n    'i'\n  );\n  const m = re.exec(text);\n  return m ? m[1].trim() : null;\n};\n\n// 4. Extract main sections\nconst educationalQualifications = grabSection(inputData, 'Educational Qualifications');\nconst jobHistory = grabSection(inputData, 'Job History');\nconst skillSet = grabSection(inputData, 'Skill Set');\n\n// 5. Extract Evaluation block\nconst evaluationBlock = grabBlock(inputData, 'Evaluation');\n\n// 6. Extract score & justification\nlet score = null;\nlet justification = null;\n\nif (evaluationBlock) {\n\n  // Match \"Relevance Score: 7/10\" or \"Score: 7/10\"\n  const scoreMatch = /(?:Relevance\\s*)?Score:\\s*(\\d{1,2})\\s*\\/\\s*10/i.exec(evaluationBlock);\n  score = scoreMatch ? scoreMatch[1] : null;\n\n  // Match \"Justification:\"\n  const justMatch = /\\*{0,2}Justification:\\*{0,2}\\s*([\\s\\S]*)/i.exec(evaluationBlock);\n  if (justMatch) {\n    justification = justMatch[1].trim();\n  }\n}\n\n// 7. Return clean JSON for n8n\nreturn [\n  {\n    json: {\n      educationalQualifications,\n      jobHistory,\n      skillSet,\n      score,\n      justification\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1712,
+        0
+      ],
+      "id": "0c465006-bfd0-4804-a290-2583dea56b7c",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "19ILyFdjH5X_H6ya-BRKc_XeL4rk2TiBGpX18y0lG_OU",
+          "mode": "list",
+          "cachedResultName": "Candidate Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19ILyFdjH5X_H6ya-BRKc_XeL4rk2TiBGpX18y0lG_OU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19ILyFdjH5X_H6ya-BRKc_XeL4rk2TiBGpX18y0lG_OU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $('Information Extractor1').item.json.output.name }}",
+            "Email": "={{ $('Information Extractor1').item.json.output.email }}",
+            "Number": "={{ $('Information Extractor1').item.json.output.phone_number }}",
+            "Skill Set": "={{ $json.skillSet }}",
+            "Qualifications": "={{ $json.educationalQualifications }}",
+            "Job History": "={{ $json.jobHistory }}",
+            "Score": "={{ $json.score }}",
+            "Justification": "={{ $json.justification }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Number",
+              "displayName": "Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Skill Set",
+              "displayName": "Skill Set",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Qualifications",
+              "displayName": "Qualifications",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job History",
+              "displayName": "Job History",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Score",
+              "displayName": "Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Justification",
+              "displayName": "Justification",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1920,
+        0
+      ],
+      "id": "c015047c-7a3c-4586-999a-980c7816dc6f",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "ScBuQ0VpQl9W9qfL",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Resume:  {{ $('Extract from File1').item.json.text }}",
+        "options": {
+          "systemMessage": "** Purpose **\nYou are a CV Evaluation and Summarization Agent. Your task is to extract key information from a CV and output it in a clean, structured format. \nYou must also evaluate how well the candidate fits a specified job role and assign a relevance score 110, followed by a short justification.\n** How It Works **\nWhen provided with a CV and job description, follow this process:\n1. Extract & Summarize Information from the CV\n Educational Qualifications\nInclude degrees, institutions, and graduation years.\n Job History\nList job titles, company names, employment dates, and 1 short sentence summarizing key responsibilities or achievements.\n Skill Set\nList technical, soft, or role-specific skills — separated by commas.\n2. Evaluate the Candidate for the Job Role\n13 Weak match\n46 Moderate match\n Compare the candidateʼs qualifications and experience with the job requirements.\n Assign a score from 110 based on relevance:\n78 Strong match\n910 Excellent match\n Provide a brief justification for the score. Mention strengths and gaps directly related to the role — no assumptions or interpretations."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        1152,
+        0
+      ],
+      "id": "38e4d7ed-d3bb-4499-90c4-ffb44bd22526",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "resume",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "binaryPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "660dd4cf-e9e4-4cf9-b460-99ec58306948",
+      "name": "Webhook",
+      "webhookId": "52e350e7-8009-4a0b-b189-9cb5203060ec"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {
+          "enableStreaming": true
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2096,
+        0
+      ],
+      "id": "94c0b6c1-f2ce-48e3-b8ff-061fa5461325",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        992,
+        288
+      ],
+      "id": "97855b55-c1e4-46a1-8e51-e0f7971ed4b0",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "vxMqRk8TU4Ofd76N",
+          "name": "Thesys1"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Upload file1": {
+      "main": [
+        [
+          {
+            "node": "Download file1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file1": {
+      "main": [
+        [
+          {
+            "node": "Extract from File1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File1": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor1",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "c0c0c93c-a5c8-4737-925c-cffaed961d13",
+  "meta": {
+    "instanceId": "cd1566d426f01cc241f86991c300d67e8ef391921b5c93c3903a4b736ba946fa"
+  },
+  "id": "d73Kiv3fBW4BUA3s",
+  "tags": []
+}
